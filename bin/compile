@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir> <env-dir>
+
+set -e
+
+env_path=$(cd $3 && pwd)
+
+function output_section() {
+  local indentation="----->"
+  echo "${indentation} $1"
+}
+
+function output_line() {
+  local spacing="      "
+  echo "${spacing} $1"
+}
+
+function export_env_vars() {
+  whitelist_regex=${2:-'^(SOURCE_VERSION|HONEYCOMB_KEY|APP_NAME|HONEYCOMB_DATASET)'}
+  blacklist_regex=${3:-'^(PATH|GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
+  if [ -d "$env_path" ]; then
+    output_section "Will export the following config vars:"
+    for e in $(ls $env_path); do
+      echo "$e" | grep -E "$whitelist_regex" | grep -vE "$blacklist_regex" &&
+      export "$e=$(cat $env_path/$e)"
+      :
+    done
+  fi
+}
+
+export_env_vars
+
+set +e
+
+# set marker
+output_section "Creating deploy Honeycomb Marker for ${HONEYCOMB_DATASET}"
+curl -s -o /dev/null https://api.honeycomb.io/1/markers/${HONEYCOMB_DATASET} \
+  --write-out '%{http_code}' \
+  -X POST \
+  -H "X-Honeycomb-Team: ${HONEYCOMB_KEY}" \
+  -d "{\"message\":\"${APP_NAME}:${SOURCE_VERSION}\", \"type\":\"deploy\"}"
+
+output_line "Done!"
